@@ -1,0 +1,333 @@
+---
+title: Resource availability and species invasion
+author: Romain
+output:
+    html_document
+editor_options: 
+  chunk_output_type: console
+---
+```{r, echo = F, message=F}
+library(tidyverse)
+library(viridis)
+library(mizerEvolution)
+```
+
+
+This report aims to explore the effect of resource availability on the success of species invading an ecosystem.
+
+The ecosystem and invading species are simulated using the mizerEvolution R package.
+
+At the end of every simulation, all species are assigned a survability score, designed to compare the species.
+
+
+### How species invade
+
+Simulations are trait based models starting with 9 natives species, their only difference being their asymptotic size (and by extension their maturation size). Asymptotic size range from 6.3 g to 10000 g and are evenly spaced across a logarithmic scale.
+
+Such default simulation is obtained with:
+
+```{r, eval = F, echo = T}
+params <- evoParams(no_sp = 9)
+```
+
+Simulations are then run for 3000 years with a probability of species invading the ecosystem of 5/1000 per time step. The default time step being 1/10 of a year, we expect an average of 150 species to invade during each simulation.
+
+Below is the code used to run the simulations. Mutation sets to 0 means no trait evolution is allowed. Alien set to 5 is the invasion chance described above.
+
+```{r, eval = F, echo = T}
+sim <- evoProject(params = params, mutation = 0, alien = 5, t_max = 3000)
+```
+
+Such simulation time and invasion chance were chosen to have simulations long enough for invader to settle and remove native species without having hundreds of invasion which would slow down the computation time.
+
+When an invasion event occurs, a new species is introduced in the ecosystem following these rules:
+
+1. Its trait values are randomly drawn from statistical distribution following this table.
+
+```{r, echo=FALSE}
+    trait_range <- data.frame("trait" = c("w_inf", "beta", "sigma", "k_vb", "ks","eta"),
+                              "distribution" = c("lnorm","uform", "uform","uform","uform","norm"),
+                              "var1" = c(6.7648459,10,0.8,0.1,2.8,0.12071530),
+                              "var2" = c(2.2524833,400000,3.2,1,13,0.11480856),row.names = 1)
+
+knitr::kable(trait_range)
+```
+
+Values were extrapolated from the North Sea parameters present in Mizer. For lognormal distribution, var1 is meanlog and var2 is sdlog. For uniform distribution, var1 is minimum value and var2 is maximum. For normal distribution, var1 is mean and var2 is sd.
+
+Beta values are converted to log10 for the uniform distribution to supress a bias towards picking high values. Eta values have to be higher than 0.027 (lowest in North Sea). W_inf cannot be higher than the highest original value in the ecosystem.
+
+2. Rmax is determined from asympotic size and kappa:
+
+$$R_{max} = \kappa  w_{inf}^{-1}$$
+3. The initial abundance per size class of the invading species is calculated as follow:
+
+$$n_{init.w} =  w_{inf}^{(2n - q - 2 + 0.35)} . w^{(-n - 0.35)}$$
+Which is the same way as when initialising an ecosystem with Mizer. This default size spectrum of abundance can be scaled up and down if necessary using the alien_init_n argument, in this case it was not.
+
+
+
+### Survival score
+
+Determining the success of an invasive species was judged over three criteria.
+
+- Did it survive until the end of the simulation
+
+- How much biomass does it have compared to the community
+
+- How much reproduction output does it have compared to the community
+
+Each criteria gave a score between 0 and 1, weighted by the species success against the other species present in the community. For example, surviving until the end gave a score of 1. Having one of the highest biomass in the ecosystem gave a score close to 1 and so on.
+
+These three scores were averaged to give a survival score per species ranging from 0 to 1.
+
+Below is the function calculating the scores:
+
+```{r}
+survivalDiag <- function(sim)
+{
+ 
+# length of survival per species
+survivalLength <- sim@params@species_params$ext - sim@params@species_params$pop # negative values means the species was still alive at the end of the sim
+names(survivalLength) <- sim@params@species_params$species
+survivalRank <- sort(survivalLength) # this sort put all the surviving species first, then the extinct ones (but in inverted order)
+survivalRank <- c(survivalRank[which(survivalRank <0)],survivalRank[rev(which(survivalRank >= 0))]) # now they are in the right order, need to assign weights
+
+# for now, you get 1 if you survived and 0 if you didn't
+survivalRank[which(survivalRank >= 0)] <- 0
+survivalRank[which(survivalRank < 0)] <- 1
+survivalRank <- survivalRank[order(as.numeric(names(survivalRank)))]
+    
+# doing different order because don't know which one I pref
+
+# % of total community biomass per species
+biom <- getBiomass(sim)[dim(sim@n)[1],]
+biomFrac <- biom / sum(biom)
+biomRank <- sort(biomFrac, decreasing = T)
+
+# % of total energy allocated to reproduction per species
+reproFrac <- getRDI(sim@params) / sum(getRDI(sim@params))
+reproRank <- sort(reproFrac, decreasing = T)
+
+# Ranking species with the 3 previous indexes
+# Native species will have a fixed rank and invasive species will be put around or maybe not
+sparams <- sim@params@species_params
+colorRank <- (survivalRank + biomFrac + reproFrac)/3
+names(colorRank) <- sim@params@species_params$name
+
+# how many natives species
+no_native <- length(which(sim@n[1,,1]>0)) # species with positive abundance at sim start
+symbol = c(rep("native",no_native), rep("invasive",(dim(sparams)[1]-no_native)))
+label = c(sparams$name[1:no_native],rep(NA,(dim(sparams)[1]-no_native)))
+
+
+plot_dat <- data.frame(species = sparams$name, beta = sparams$beta,
+                       sigma = sparams$sigma, w_inf = sparams$w_inf,
+                       w_mat = sparams$w_mat, k_vb = sparams$k_vb,
+                       ks = sparams$ks, color = colorRank,
+                       Origin = symbol, label = label)
+
+return(plot_dat)
+}
+```
+
+
+
+### Kappa scenarios
+
+To explore the effect of kappa on the species invasion success, 10 simulations were run for 9 different value of kappa (0.0005, 0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1, 5).
+
+The simulation were then grouped per kappa values for plots. Native species were identical across simulation. However, depending on the success of invading species, native species did not have the same survival score across any two simulations. In that regard, survival scores of the native species within simulations of same kappa were averaged to present only one value.
+
+### Results
+
+Invaders have randomised traits value over 6 parameters, therefore one way to find patters is to examine the survival score of the species versus their trait value.
+
+```{r}
+plot_dat <- readRDS("simulations/survivalScore.rds")
+```
+
+
+```{r, echo= F, warning=F}
+ggplot(plot_dat)+
+    geom_point(aes(x = w_inf, y = w_mat, color = color, shape = Origin, size = color)) +
+    scale_x_continuous(trans = "log10") +
+    scale_y_continuous(trans = "log10") +
+    ggrepel::geom_text_repel(aes(x = w_inf, y = w_mat, label = label), hjust = 0, nudge_x = 0.05)+
+  facet_wrap(~kappa) +
+    scale_colour_viridis(name = "Survivability") +
+       theme(panel.background = element_blank(), 
+         panel.border = element_rect(colour = "gray", fill=NA, size=.5),
+         text = element_text(size=10),
+         panel.grid.minor = element_line(color = "gray"),
+         legend.position = "bottom",legend.key = element_rect(fill = "white"))
+```
+
+Figure 1: Asymptotic size versus maturation size of all species, faceted per kappa value. Color gradient is the survival score of the species. Dot size increases with survival score. Native species are denoted with a triangle and a name while invasive species have a disc.
+
+In figure 1, it appears that smaller size have on average a smaller survival score. This is not true only for native species which can have a high survival score at small size. It could mean that having high biomass and reproduction output at small size is achieved with a specific combination of trait values whereas larger size are more forgiving.
+
+
+
+```{r, echo= F, warning=F}
+ggplot(plot_dat)+
+    geom_point(aes(x = beta, y = sigma, color = color, shape = Origin, size = color)) +
+    scale_x_continuous(trans = "log10") +
+    # scale_y_continuous(trans = "log10") +
+     ggrepel::geom_text_repel(aes(x = beta, y = sigma, label = label), hjust = 0, nudge_x = 0.05)+
+    facet_wrap(~kappa) +
+    scale_colour_viridis(name = "Survivability") +
+       theme(panel.background = element_blank(), 
+         panel.border = element_rect(colour = "gray", fill=NA, size=.5),
+         text = element_text(size=10),
+         panel.grid.minor = element_line(color = "gray"),
+         legend.position = "bottom",legend.key = element_rect(fill = "white"))
+```
+
+Figure 2: Beta versus sigma of all species, faceted per kappa value. Color gradient is the survival score of the species. Dot size increases with survival score. Native species are denoted with a triangle and invasive species with a disc.
+
+In figure 2, there doesn't seem to be any pattern worth mentionning.
+
+```{r, echo= F, warning=F}
+ggplot(plot_dat)+
+    geom_point(aes(x = ks, y = k_vb, color = color, shape = Origin, size = color)) +
+    # scale_x_continuous(trans = "log10") +
+    # scale_y_continuous(trans = "log10") +
+     ggrepel::geom_text_repel(aes(x = ks, y = k_vb, label = label), hjust = 0, nudge_x = 0.05)+
+    facet_wrap(~kappa) +
+    scale_colour_viridis(name = "Survivability") +
+       theme(panel.background = element_blank(), 
+         panel.border = element_rect(colour = "gray", fill=NA, size=.5),
+         text = element_text(size=10),
+         panel.grid.minor = element_line(color = "gray"),
+         legend.position = "bottom",legend.key = element_rect(fill = "white"))
+
+```
+
+
+Figure 3: Metabolism coefficient versus von Bertalanffy parameter of all species, faceted per kappa value. Color gradient is the survival score of the species. Dot size increases with survival score. Native species are denoted with a triangle and invasive species with a disc.
+
+In figure 3, higher survival score is correlated with higher k_vb and therefore faster growth. There doesn't seem to be any kappa effect.
+
+```{r, echo=F}
+
+plot_dat2 <- readRDS("simulations/noSp.rds")
+plot_dat2 <- reshape2::melt(plot_dat2)
+colnames(plot_dat2) <- c("time","kappa","noSp")
+plot_dat2$kappa <- as.factor(plot_dat2$kappa)
+
+ggplot(plot_dat2) +
+    geom_line(aes(x = time, y = noSp, color = kappa))+
+    scale_y_continuous(name = "number of species alive")
+
+
+```
+
+Figure 4: Number of species through time. Values are averaged across simulation of same kappa. Colors are per kappa. All simualtions start with 9 native species.
+
+Figure 4 shows that the ecosystem haven't reach a steady state, richness wise. Kappa doesn't have an effect either. The simulation will need to be run for a longer time.
+
+### Comments
+
+```{r, eval=F,echo=F}
+
+# To plot the number of species alive through time
+
+plotNoSp <- function(sim, returnData = F)
+{
+  
+  myData <- data.frame(pop = sim@params@species_params$pop, ext = sim@params@species_params$ext)
+  t_max = dim(sim@n)[1]
+  totalSp <- vector(mode = "numeric", length = t_max)
+  totalSp[1] <- length(which(1 == myData$pop))
+  totalExt <- vector(mode = "numeric", length = t_max)
+
+  for(iTime in 2:t_max) totalSp[iTime] <- totalSp[iTime-1] + length(which(iTime == myData$pop))
+    
+  for(iTime in 2:t_max) totalExt[iTime] <- totalExt[iTime-1] + length(which(iTime == myData$ext))
+  
+  plot_dat <- data.frame(time = 1:t_max, totalSp = totalSp, extinction = totalExt, speciesNumber = totalSp - totalExt)  
+  
+  
+ p <- ggplot(plot_dat)+
+    geom_line(aes(x = time, y = speciesNumber))
+    
+  
+ 
+  if(returnData) return(plot_dat) else return(p)
+  
+}
+
+
+```
+
+
+
+Here is the distribution in value of the survival score
+```{r, echo=F}
+
+
+ggplot(plot_dat) +
+    geom_density(aes(x = color)) +
+    scale_x_continuous(name = "survival score")
+
+```
+
+
+This explains the predominance of one color in the plots and it makes hard to see any patterns so I need better survival scores. It seems that the species surviving, all have a similar biomass and reproduction output.
+
+
+Looking in more details at the number of invading species and their extinction
+
+
+```{r}
+
+
+sim <- readRDS("simulations/kappa0.5/sim1.RDS")
+
+plot_dat <- plotNoSp(sim, returnData = T)
+
+plot_dat <- reshape2::melt(plot_dat, "time")
+
+ggplot(plot_dat) +
+  geom_line(aes(x = time, y = value, color = variable))
+
+
+# plotBiomass(sim)
+
+
+```
+
+Distribution of Rmax, maybe it has a role in so many species coexisting
+
+
+```{r}
+
+plot_dat <- readRDS("simulations/survivalScore.rds")
+plot_dat <- filter(plot_dat, color >= .001)
+
+ggplot(plot_dat) +
+  geom_point(aes(x = R_max, y = color)) +
+  facet_wrap(~kappa) +
+  scale_x_continuous(trans = "log10")
+
+
+
+
+```
+
+
+Most of the species surviving have an extremly low Rmax, which means they don't reproduce too much and stay quiet on the side without disturbing their neighnours. It could be why so many species coexist. But why is Rmax so low though? It is standard formula using kappa and w_inf. Maybe need to relax that one?
+
+
+TODO
+
+
+
+- reassess survival score
+
+- wider kappa range?
+
+- 
+
+
