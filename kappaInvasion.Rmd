@@ -163,6 +163,56 @@ ggplot(plot_dat)+
          legend.position = "bottom",legend.key = element_rect(fill = "white"))
 ```
 
+
+```{r, echo = F, eval = T, warnings = F}
+plot_dat2 <- plot_dat
+plot_dat2$w_inf <- log10(plot_dat$w_inf)
+plot_dat2$w_mat <- log10(plot_dat$w_mat)
+
+kknnDat <- NULL
+for(iKappa in unique(plot_dat2$kappa))
+{
+  kappaDat <- filter(plot_dat2, kappa == iKappa)
+  
+  winfVec <- seq(min(kappaDat$w_inf),max(kappaDat$w_inf),length=250) # interpolation window
+  wmatVec <- seq(min(kappaDat$w_mat),max(kappaDat$w_mat),length=250)
+  fit <-kknn::kknn(color ~ w_inf + w_mat, kappaDat,expand.grid(w_inf = winfVec,w_mat = wmatVec),k=10) # fit KKNN
+  im <- matrix(fitted(fit),length(winfVec),length(wmatVec),dimnames = list("w_inf" = winfVec, "w_mat" = wmatVec)) # put the data in handling shape
+  
+  tempDat <- melt(im)
+  tempDat$kappa <- iKappa
+  kknnDat <- rbind(kknnDat,tempDat)
+}
+
+# not working | too slow/too much res
+
+jet.colors <- colorRampPalette(c("#00007F", "blue", "#007FFF", "cyan", "#7FFF7F", "yellow", "#FF7F00", "red", "#7F0000","maroon4"))
+# colorScale <- c(0,.05,.1,.15,.2,.25,.6,1)
+
+
+
+ggplot(kknnDat) +
+  geom_raster(aes(x = w_inf, y = w_mat, fill = value)) +
+  scale_fill_gradientn(colours=jet.colors(10))+#,values = colorScale, breaks = c(1e-5,1e-3,1e-2,1e-1,1,1e1,1e2,1e3,1e5,1e10,1e15)) +
+  # geom_point(aes(x = t_d, y = ed_int, size = value), alpha = .25)+
+  # scale_radius(trans = "log10") +
+  # scale_x_continuous(name = "w_inf", trans = "log10")+
+  # scale_y_continuous(name = "w_mat", trans = "log10")+
+  # labs(fill = "Fitness")+
+  facet_wrap(~kappa) +#, labeller = labeller(time = time.labs))+
+  theme(legend.title=element_text(),
+  legend.justification=c(1,1),
+  legend.key = element_rect(fill = "white"),
+  panel.background = element_rect(fill = "white", color = "black"),
+  legend.key.height = unit(2,"cm"),
+  strip.background = element_blank(),
+  panel.grid.minor = element_line(colour = "grey92"))+
+  ggtitle(NULL)
+```
+
+
+
+
 Figure 1: Asymptotic size versus maturation size of all species, faceted per kappa value. Color gradient is the survival score of the species. Dot size increases with survival score. Native species are denoted with a triangle and a name while invasive species have a disc.
 
 In figure 1, it appears that smaller size have on average a smaller survival score. This is not true only for native species which can have a high survival score at small size. It could mean that having high biomass and reproduction output at small size is achieved with a specific combination of trait values whereas larger size are more forgiving.
@@ -184,6 +234,49 @@ ggplot(plot_dat)+
          legend.position = "bottom",legend.key = element_rect(fill = "white"))
 ```
 
+```{r, echo = F, eval = T, warnings = F}
+
+kknnDat <- NULL
+for(iKappa in unique(plot_dat$kappa))
+{
+  kappaDat <- filter(plot_dat, kappa == iKappa)
+  
+  betaVec <- seq(min(kappaDat$beta),max(kappaDat$beta),length=250) # interpolation window
+  sigmaVec <- seq(min(kappaDat$sigma),max(kappaDat$sigma),length=250)
+  fit <-kknn::kknn(color ~ beta + sigma, kappaDat,expand.grid(beta = betaVec,sigma = sigmaVec),k=10) # fit KKNN
+  im <- matrix(fitted(fit),length(betaVec),length(sigmaVec),dimnames = list("beta" = betaVec, "sigma" = sigmaVec)) # put the data in handling shape
+  
+  tempDat <- melt(im)
+  tempDat$kappa <- iKappa
+  kknnDat <- rbind(kknnDat,tempDat)
+}
+
+# not working | too slow/too much res
+
+jet.colors <- colorRampPalette(c("#00007F", "blue", "#007FFF", "cyan", "#7FFF7F", "yellow", "#FF7F00", "red", "#7F0000","maroon4"))
+# colorScale <- c(0,.05,.1,.15,.2,.25,.6,1)
+
+
+
+ggplot(kknnDat) +
+  geom_raster(aes(x = beta, y = sigma, fill = value)) +
+  scale_fill_gradientn(colours=jet.colors(10))+#,values = colorScale, breaks = c(1e-5,1e-3,1e-2,1e-1,1,1e1,1e2,1e3,1e5,1e10,1e15)) +
+  # geom_point(aes(x = t_d, y = ed_int, size = value), alpha = .25)+
+  # scale_radius(trans = "log10") +
+  # scale_x_continuous(name = "w_inf", trans = "log10")+
+  # scale_y_continuous(name = "w_mat", trans = "log10")+
+  # labs(fill = "Fitness")+
+  facet_wrap(~kappa) +#, labeller = labeller(time = time.labs))+
+  theme(legend.title=element_text(),
+  legend.justification=c(1,1),
+  legend.key = element_rect(fill = "white"),
+  panel.background = element_rect(fill = "white", color = "black"),
+  legend.key.height = unit(2,"cm"),
+  strip.background = element_blank(),
+  panel.grid.minor = element_line(colour = "grey92"))+
+  ggtitle(NULL)
+```
+
 Figure 2: Beta versus sigma of all species, faceted per kappa value. Color gradient is the survival score of the species. Dot size increases with survival score. Native species are denoted with a triangle and invasive species with a disc.
 
 In figure 2, there doesn't seem to be any pattern worth mentionning.
@@ -202,6 +295,52 @@ ggplot(plot_dat)+
          panel.grid.minor = element_line(color = "gray"),
          legend.position = "bottom",legend.key = element_rect(fill = "white"))
 
+```
+
+
+```{r, echo = F, eval = T, warnings = F}
+
+plot_dat2 <- plot_dat2[-which(is.na(plot_dat2$k_vb)),] 
+
+kknnDat <- NULL
+for(iKappa in unique(plot_dat2$kappa))
+{
+  kappaDat <- filter(plot_dat2, kappa == iKappa)
+  
+  ksVec <- seq(min(kappaDat$ks),max(kappaDat$ks),length=250) # interpolation window
+  k_vbVec <- seq(min(kappaDat$k_vb),max(kappaDat$k_vb),length=250)
+  fit <-kknn::kknn(color ~ ks + k_vb, kappaDat,expand.grid(ks = ksVec,k_vb = k_vbVec),k=10) # fit KKNN
+  im <- matrix(fitted(fit),length(ksVec),length(k_vbVec),dimnames = list("ks" = ksVec, "k_vb" = k_vbVec)) # put the data in handling shape
+  
+  tempDat <- melt(im)
+  tempDat$kappa <- iKappa
+  kknnDat <- rbind(kknnDat,tempDat)
+}
+
+# not working | too slow/too much res
+
+jet.colors <- colorRampPalette(c("#00007F", "blue", "#007FFF", "cyan", "#7FFF7F", "yellow", "#FF7F00", "red", "#7F0000","maroon4"))
+# colorScale <- c(0,.05,.1,.15,.2,.25,.6,1)
+
+
+
+ggplot(kknnDat) +
+  geom_raster(aes(x = ks, y = k_vb, fill = value)) +
+  scale_fill_gradientn(colours=jet.colors(10)) +#,values = colorScale)+#, breaks = c(1e-5,1e-3,1e-2,1e-1,1,1e1,1e2,1e3,1e5,1e10,1e15)) +
+  # geom_point(aes(x = t_d, y = ed_int, size = value), alpha = .25)+
+  # scale_radius(trans = "log10") +
+  # scale_x_continuous(name = "w_inf", trans = "log10")+
+  # scale_y_continuous(name = "w_mat", trans = "log10")+
+  # labs(fill = "Fitness")+
+  facet_wrap(~kappa) +#, labeller = labeller(time = time.labs))+
+  theme(legend.title=element_text(),
+  legend.justification=c(1,1),
+  legend.key = element_rect(fill = "white"),
+  panel.background = element_rect(fill = "white", color = "black"),
+  legend.key.height = unit(2,"cm"),
+  strip.background = element_blank(),
+  panel.grid.minor = element_line(colour = "grey92"))+
+  ggtitle(NULL)
 ```
 
 
@@ -229,7 +368,7 @@ Figure 4 shows that the ecosystem haven't reach a steady state, richness wise. K
 
 ### Comments
 
-```{r, eval=F,echo=F}
+```{r, eval=T,echo=F}
 
 # To plot the number of species alive through time
 
@@ -326,8 +465,6 @@ TODO
 
 - reassess survival score
 
-- wider kappa range?
-
-- 
+ 
 
 
