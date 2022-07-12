@@ -492,7 +492,7 @@ p3 <- ggplot(plot_dat)+
 
 with a lots of points, make it as a heat map or kknn
 
-also review survibility score and gradient
+also review survivability score and gradient
 
 ### plotting number of phen
 
