@@ -385,6 +385,30 @@ for(ikappa in kappa_vec)
 result analysis
 
 
+## Trying with no Rmax
+
+
+```{r}
+
+
+kappa_vec <- c(0.0005, 0.001, 0.005,0.01, 0.05,0.1, 0.5, 1, 5)
+
+for(ikappa in kappa_vec)
+{
+  if(!dir.exists(paste0("simulations/noRmax/kappa",ikappa))) dir.create(paste0("simulations/noRmax/kappa",ikappa))
+          params <- evoParams(no_sp = 9,kappa = ikappa)
+          params@species_params$R_max <- Inf
+     for(iSim in 1:3)
+     {
+       sim <- evoProject(params = params, mutation = 0, alien = 5, t_max = 3000)
+       saveRDS(sim, file = paste0("simulations/noRmax/kappa",ikappa,"/sim",iSim,".RDS"))
+     }
+}
+
+```
+
+
+
 
 need to pool sims per kappa and plot kappa facets
 
