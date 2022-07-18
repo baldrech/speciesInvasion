@@ -10,6 +10,8 @@ editor_options:
 library(tidyverse)
 library(viridis)
 library(mizerEvolution)
+
+folderName <- "simulations/noRmax"
 ```
 
 
@@ -97,6 +99,14 @@ survivalRank <- c(survivalRank[which(survivalRank <0)],survivalRank[rev(which(su
 survivalRank[which(survivalRank >= 0)] <- 0
 survivalRank[which(survivalRank < 0)] <- 1
 survivalRank <- survivalRank[order(as.numeric(names(survivalRank)))]
+
+# add a bonus for number of years survived compared to total length
+# first need to correct negative values for species still existing
+survivalLength[which(survivalLength < 0)] <- dim(sim@n)[1] + survivalLength[which(survivalLength < 0)] 
+survivalLength <- survivalLength / dim(sim@n)[1]
+
+# adding length survived and survived until end
+survivalRank <- .15*survivalRank + survivalLength # assuming that reaching end of sim gives a bonus of .15 (because good species arriving at a late stage of the sim would get a bad score for not surviving long)
     
 # doing different order because don't know which one I pref
 
@@ -124,7 +134,7 @@ label = c(sparams$name[1:no_native],rep(NA,(dim(sparams)[1]-no_native)))
 plot_dat <- data.frame(species = sparams$name, beta = sparams$beta,
                        sigma = sparams$sigma, w_inf = sparams$w_inf,
                        w_mat = sparams$w_mat, k_vb = sparams$k_vb,
-                       ks = sparams$ks, color = colorRank,
+                       ks = sparams$ks, R_max = sparams$R_max,color = colorRank,
                        Origin = symbol, label = label)
 
 return(plot_dat)
@@ -144,7 +154,7 @@ The simulation were then grouped per kappa values for plots. Native species were
 Invaders have randomised traits value over 6 parameters, therefore one way to find patters is to examine the survival score of the species versus their trait value.
 
 ```{r}
-plot_dat <- readRDS("simulations/survivalScore.rds")
+plot_dat <- readRDS(paste0(folderName,"/survivalScore.rds"))
 ```
 
 
@@ -350,21 +360,45 @@ In figure 3, higher survival score is correlated with higher k_vb and therefore 
 
 ```{r, echo=F}
 
-plot_dat2 <- readRDS("simulations/noSp.rds")
+# Number of species vs total biomass per kappa
+plot_sp <- readRDS(paste0(folderName,"/noSp.rds"))
+plot_biom <- readRDS(paste0(folderName,"/totBiom.rds"))
+
+plot_dat2 <- plot_biom / plot_sp
+
 plot_dat2 <- reshape2::melt(plot_dat2)
-colnames(plot_dat2) <- c("time","kappa","noSp")
+colnames(plot_dat2) <- c("time","kappa","value")
 plot_dat2$kappa <- as.factor(plot_dat2$kappa)
 
 ggplot(plot_dat2) +
-    geom_line(aes(x = time, y = noSp, color = kappa))+
-    scale_y_continuous(name = "number of species alive")
+    geom_line(aes(x = time, y = value, color = kappa))+
+    scale_y_continuous(name = "Total biomass / number of species", trans = "log10")
 
 
 ```
 
-Figure 4: Number of species through time. Values are averaged across simulation of same kappa. Colors are per kappa. All simualtions start with 9 native species.
+Figure 4: Total biomass versus number of species. Values are averaged across simulation of same kappa. Colors are per kappa. All simualtions start with 9 native species.
 
-Figure 4 shows that the ecosystem haven't reach a steady state, richness wise. Kappa doesn't have an effect either. The simulation will need to be run for a longer time.
+Figure 4 shows that ???
+
+
+```{r, eval = F}
+
+a <- plot_biom[,6]
+
+plot(a)
+
+a[600:750]
+
+sim1 <- readRDS("simulations/noRmax/kappa0.1/sim1.RDS")
+sim2 <- readRDS("simulations/noRmax/kappa0.1/sim2.RDS")
+sim3 <- readRDS("simulations/noRmax/kappa0.1/sim3.RDS")
+
+
+```
+
+In one of the simulations of kappa = 0.1, one of the species goes to 1e17 g and kills everything else. Keeping it just in case but it makes above plot look bad
+
 
 ### Comments
 
@@ -422,7 +456,7 @@ Looking in more details at the number of invading species and their extinction
 ```{r}
 
 
-sim <- readRDS("simulations/kappa0.5/sim1.RDS")
+sim <- readRDS(paste0(folderName,"/kappa0.5/sim1.RDS"))
 
 plot_dat <- plotNoSp(sim, returnData = T)
 
@@ -430,6 +464,7 @@ plot_dat <- reshape2::melt(plot_dat, "time")
 
 ggplot(plot_dat) +
   geom_line(aes(x = time, y = value, color = variable))
+
 
 
 # plotBiomass(sim)
@@ -442,7 +477,7 @@ Distribution of Rmax, maybe it has a role in so many species coexisting
 
 ```{r}
 
-plot_dat <- readRDS("simulations/survivalScore.rds")
+plot_dat <- readRDS(paste0(folderName,"/survivalScore.rds"))
 plot_dat <- filter(plot_dat, color >= .001)
 
 ggplot(plot_dat) +
@@ -459,12 +494,41 @@ ggplot(plot_dat) +
 Most of the species surviving have an extremly low Rmax, which means they don't reproduce too much and stay quiet on the side without disturbing their neighnours. It could be why so many species coexist. But why is Rmax so low though? It is standard formula using kappa and w_inf. Maybe need to relax that one?
 
 
-TODO
+### Adding stochasticity through temperature
 
 
+```{r}
+source("temperatureFuncs.R")
+# a function that:
+# adds the temperature parameters to the params object
+# replace default rates in mizer with temperature mizer
+# add temperature vector to param object
 
-- reassess survival score
+#' @paramTemp a dataframe with the temperature parameters to add to the mizer object 
 
- 
+mizerTemp <- function(params, temp_vec, paramTemp = NULL){
+  
+if(!is.null(paramTemp)){
+params@species_params$Ea <- paramTemp$Ea
+params@species_params$c_a <- paramTemp$c_a
+params@species_params$Ed <- paramTemp$Ed
+params@species_params$c_d <- paramTemp$c_d
+params@species_params$t_d <- paramTemp$t_d
+params@species_params$t_ref <- paramTemp$t_ref
+}
+
+other_params(params)$temperature <- temp_vec
+
+params <- setRateFunction(params, "Encounter", "mizerEncounterTemp")
+params <- setRateFunction(params, "FeedingLevel", "mizerFeedingLevelTemp")
+params <- setRateFunction(params, "PredRate", "mizerPredRateTemp")
+
+params <- setParams(params)
+  
+  return(params)
+}
+
+
+```
 
 

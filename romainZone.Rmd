@@ -389,6 +389,12 @@ result analysis
 
 
 ```{r}
+# 
+# 
+#           params <- evoParams(no_sp = 9,kappa = 5)
+#           params@species_params$R_max <- Inf
+# sim <- evoProject(params = params, mutation = 0, alien = 5, t_max = 200)
+# plotBiomass(sim)
 
 
 kappa_vec <- c(0.0005, 0.001, 0.005,0.01, 0.05,0.1, 0.5, 1, 5)
@@ -400,7 +406,7 @@ for(ikappa in kappa_vec)
           params@species_params$R_max <- Inf
      for(iSim in 1:3)
      {
-       sim <- evoProject(params = params, mutation = 0, alien = 5, t_max = 3000)
+       sim <- evoProject(params = params, mutation = 0, alien = 5, t_max = 1500)
        saveRDS(sim, file = paste0("simulations/noRmax/kappa",ikappa,"/sim",iSim,".RDS"))
      }
 }
@@ -416,7 +422,7 @@ need to pool sims per kappa and plot kappa facets
 ```{r}
 tic()
 kappa_vec <- c(0.0005, 0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1, 5) 
-folderName <- "simulations"
+folderName <- "simulations/noRmax"
 plot_dat <- NULL
 for(iFolder in kappa_vec)
 {
@@ -438,7 +444,7 @@ for (iSim in 1:length(dir(simFolder))) {
 }
 
 # all sims are issued from the same param so the native species will be duplicated
-# same names but not necessrily same survival score
+# same names but not necessarily same survival score
 # need to do an average of them
 
 # native species
@@ -467,9 +473,10 @@ plot_dat <- rbind(plot_dat, kappa_dat)
 toc()
 
 saveRDS(plot_dat, file = paste0(folderName,"/survivalScore.rds"))
+```
 
 
-
+```{r}
 p1 <- ggplot(plot_dat)+
     geom_point(aes(x = w_inf, y = w_mat, color = color, shape = Origin, size = color)) +
     scale_x_continuous(trans = "log10") +
@@ -591,5 +598,43 @@ colnames(plot_dat) <- kappa_vec
 toc()
 
 saveRDS(plot_dat, file = paste0(folderName,"/noSp.rds"))
+```
+
+
+## Extracting average total biomass per kappa
+
+
+```{r}
+tic()
+kappa_vec <- c(0.0005, 0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1, 5) 
+plot_dat <- NULL
+for(iFolder in kappa_vec)
+{
+simFolder <- paste0(folderName,"/kappa",iFolder,"/")
+
+kappa_dat <- NULL
+
+for (iSim in 1:length(dir(simFolder))) {
+  
+  if(file.exists(paste0(simFolder,"sim",iSim,".RDS"))) {
+    
+    mySim <- readRDS(paste0(simFolder,"sim",iSim,".RDS"))
+    
+    res <- getBiomass(mySim)
+    res <- rowSums(res)
+    
+    kappa_dat <- cbind(kappa_dat,res)
+  }
+  
+}
+kappa_datMean <- apply(kappa_dat,1,mean )
+
+plot_dat <- cbind(plot_dat, kappa_datMean)
+
+}
+colnames(plot_dat) <- kappa_vec
+toc()
+
+saveRDS(plot_dat, file = paste0(folderName,"/totBiom.rds"))
 ```
 
